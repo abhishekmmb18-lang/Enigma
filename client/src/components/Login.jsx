@@ -12,8 +12,8 @@ const Login = ({ onSwitch, onLogin }) => {
         const formData = { email, password };
 
         try {
-            // Try connecting to local backend
-            const res = await fetch(`http://${window.location.hostname}:5000/api/login`, {
+            // Try connecting to backend (Local or Remote)
+            const res = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formData),
