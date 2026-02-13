@@ -6,7 +6,7 @@ const Dashboard = () => {
     React.useEffect(() => {
         const fetchDrowsiness = async () => {
             try {
-                const res = await fetch('http://localhost:5000/api/drowsiness');
+                const res = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/drowsiness`);
                 const data = await res.json();
                 // Server returns { current: { isDrowsy, events }, history: [] }
                 // We need to set the state to the 'current' object
@@ -133,7 +133,7 @@ const LocationWidget = () => {
     React.useEffect(() => {
         const interval = setInterval(async () => {
             try {
-                const res = await fetch('http://localhost:5000/api/location');
+                const res = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/location`);
                 const data = await res.json();
                 setGps(data);
             } catch (e) { }
@@ -191,7 +191,7 @@ const RadarWidget = () => {
     React.useEffect(() => {
         const fetchRadar = async () => {
             try {
-                const res = await fetch('http://localhost:5000/api/radar');
+                const res = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/radar`);
                 const data = await res.json();
 
                 // Only update if angle changed significantly or it's new data
@@ -324,7 +324,7 @@ const AlcoholWidget = () => {
     React.useEffect(() => {
         const interval = setInterval(async () => {
             try {
-                const res = await fetch('http://localhost:5000/api/alcohol');
+                const res = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/alcohol`);
                 const json = await res.json();
                 setData(json);
             } catch (e) { }

@@ -10,7 +10,7 @@ const RoadMonitor = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const res = await fetch('http://localhost:5000/api/vibration');
+                const res = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/vibration`);
                 const json = await res.json();
 
                 setCurrent(json);
@@ -39,7 +39,7 @@ const RoadMonitor = () => {
     useEffect(() => {
         const fetchLoc = async () => {
             try {
-                const res = await fetch('http://localhost:5000/api/location');
+                const res = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/location`);
                 const json = await res.json();
                 setLocation({ lat: json.latitude, lon: json.longitude });
             } catch (e) {

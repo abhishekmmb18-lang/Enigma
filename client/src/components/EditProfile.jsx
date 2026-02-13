@@ -34,7 +34,7 @@ const EditProfile = ({ user, onCancel, onUpdate }) => {
         setError(null);
 
         try {
-            const response = await fetch(`http://localhost:5000/api/user/${user.id}`, {
+            const response = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/user/${user.id}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
