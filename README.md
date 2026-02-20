@@ -47,9 +47,6 @@
 
 ## 📦 Installation & Setup
 
-For a complete, step-by-step guide to assembling the hardware and installing the software, please see:
-👉 **[BUILD_INSTRUCTIONS.md](./BUILD_INSTRUCTIONS.md)**
-
 ### Prerequisites
 *   Node.js (v16+)
 *   Python (v3.8+)
@@ -88,11 +85,6 @@ python drowsiness_detector.py
 ---
 
 ## 🔌 Hardware Wiring
-
-For detailed wiring instructions of the GSM, GPS, and Sensors, please refer to [WIRING_AND_SETUP.md](./WIRING_AND_SETUP.md).
-
----
-
 ## 🔮 Future Enhancements
 *   Integration with **V2V (Vehicle-to-Vehicle)** communication.
 *   **Blockchain-based** black box data storage for immutable evidence.
