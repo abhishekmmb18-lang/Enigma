@@ -33,8 +33,7 @@ Run these commands (Replace the URL with YOUR copied URL):
 
     git branch -M main
 
-    git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
-
+    git remote add origin https://github.com/abhishekmmb18-lang/i-SARTHI.git
     git push -u origin main
 
 ---

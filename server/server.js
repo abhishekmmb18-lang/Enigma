@@ -10,6 +10,31 @@ app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
+// --- Emergency Profile Table ---
+db.run(`CREATE TABLE IF NOT EXISTS user_profile (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    name TEXT,
+    emergency_contact TEXT,
+    blood_group TEXT
+)`);
+
+// --- Emergency Profile API ---
+app.post('/api/profile', (req, res) => {
+    const { name, emergency_contact, blood_group } = req.body;
+    const sql = `INSERT OR REPLACE INTO user_profile (id, name, emergency_contact, blood_group) VALUES (1, ?, ?, ?)`;
+    db.run(sql, [name, emergency_contact, blood_group], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true, message: "Emergency Profile Updated" });
+    });
+});
+
+app.get('/api/profile', (req, res) => {
+    db.get("SELECT * FROM user_profile WHERE id = 1", (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(row || {});
+    });
+});
+
 // Signup Endpoint
 app.post('/api/signup', (req, res) => {
     const { username, email, password } = req.body;
@@ -162,11 +187,23 @@ app.post('/api/drowsiness', (req, res) => {
     // Log if drowsy
     if (isDrowsy) {
         console.log("⚠️ DROWSINESS ALERT RECEIVED!");
+        const lat = locationData.latitude;
+        const lon = locationData.longitude;
+        db.run(`INSERT INTO road_events (type, confidence, latitude, longitude, created_at) VALUES (?, ?, ?, ?, datetime('now'))`,
+            ['Drowsiness Alert', 100, lat, lon],
+            (err) => { if (err) console.error("Drowsiness Incident Error", err); }
+        );
     }
     res.json({ success: true });
 });
 
 app.get('/api/drowsiness', (req, res) => {
+    // Auto-reset if data is stale (> 5 seconds old)
+    // This prevents "Drowsiness Detected" from sticking if the Python script crashes or is closed
+    if (Date.now() - latestDrowsinessStatus.timestamp > 5000) {
+        latestDrowsinessStatus.isDrowsy = false;
+    }
+
     // Return latest status + history
     const sql = "SELECT * FROM drowsiness_logs ORDER BY id DESC LIMIT 10";
     db.all(sql, [], (err, rows) => {
@@ -216,22 +253,47 @@ let vibrationData = {
     timestamp: Date.now()
 };
 
+let lastCriticalLog = 0; // Debounce for critical logs
+let lastVibrationLog = 0; // Throttle for continuous logs
+
 app.post('/api/vibration', (req, res) => {
-    const { left, right } = req.body;
+    const { left, right, raw_left, raw_right } = req.body;
+    let lVal = parseFloat(left) || 0;
+    let rVal = parseFloat(right) || 0;
+
+    // Server-side Sensitivity Calibration (Use Raw Data if available)
+    // Overrides Pi's internal normalization to allow remote tuning
+    if (raw_left !== undefined && raw_right !== undefined) {
+        lVal = Math.min(parseFloat(raw_left) / 35000.0, 1.2); // Divisor 35k (User Tuned)
+        rVal = Math.min(parseFloat(raw_right) / 35000.0, 1.2);
+    }
+
     vibrationData = {
-        left: parseFloat(left) || 0,
-        right: parseFloat(right) || 0,
+        left: lVal,
+        right: rVal,
         timestamp: Date.now()
     };
 
-    // Log to Sensor Logs
-    // Only log if vibration is significant to save space? User said "every data". 
-    // But continuous vibration checking is 100Hz. That will kill the DB.
-    // I will log if values are non-zero/significant or throttle. 
-    // Let's log if left > 0.1 or right > 0.1 to avoid noise.
-    if (vibrationData.left > 0.1 || vibrationData.right > 0.1) {
+    // 1. Critical Incident Logging (> 0.8)
+    // Debounce: Only log once every 5 seconds per event sequence
+    if ((lVal >= 0.8 || rVal >= 0.8) && (Date.now() - lastCriticalLog > 5000)) {
+        lastCriticalLog = Date.now();
+        const maxVib = Math.max(lVal, rVal);
+        const lat = locationData.latitude;
+        const lon = locationData.longitude;
+
+        const sql = `INSERT INTO road_events (type, confidence, vibration, latitude, longitude, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))`;
+        db.run(sql, ['Critical Vibration', 100, maxVib, lat, lon], (err) => {
+            if (err) console.error("Failed to log Critical Vibration:", err.message);
+            else console.log(`⚠️ Critical Vibration Logged: ${maxVib} at ${lat},${lon}`);
+        });
+    }
+
+    // 2. Continuous Sensor Logging (Throttle: 1s to prevent DB bloating)
+    if (Date.now() - lastVibrationLog > 1000) {
+        lastVibrationLog = Date.now();
         db.run(`INSERT INTO sensor_logs (sensor_type, value_1, value_2) VALUES (?, ?, ?)`,
-            ['Vibration', vibrationData.left, vibrationData.right],
+            ['Vibration', lVal, rVal],
             (err) => { if (err) console.error("Vibration Log Error:", err.message); }
         );
     }
@@ -241,6 +303,26 @@ app.post('/api/vibration', (req, res) => {
 
 app.get('/api/vibration', (req, res) => {
     res.json(vibrationData);
+});
+
+// --- GSM Status API ---
+let gsmStatus = {
+    connected: false,
+    timestamp: Date.now()
+};
+
+app.post('/api/gsm-status', (req, res) => {
+    const { connected } = req.body;
+    gsmStatus = {
+        connected: !!connected,
+        timestamp: Date.now()
+    };
+    console.log(`📶 GSM Status Update: ${gsmStatus.connected ? "CONNECTED" : "DISCONNECTED"}`);
+    res.json({ success: true });
+});
+
+app.get('/api/gsm-status', (req, res) => {
+    res.json(gsmStatus);
 });
 
 // --- Alcohol Monitor API (MQ-3) ---
@@ -256,7 +338,15 @@ app.post('/api/alcohol', (req, res) => {
 
     let level = 'Normal';
     if (val > 30) level = 'Moderate';
-    if (val > 70) level = 'High';
+    if (val > 70) {
+        level = 'High';
+        const lat = locationData.latitude;
+        const lon = locationData.longitude;
+        db.run(`INSERT INTO road_events (type, confidence, alcohol, latitude, longitude, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+            ['Alcohol Alert', 100, val, lat, lon],
+            (err) => { if (err) console.error("Alcohol Incident Error", err); }
+        );
+    }
 
     alcoholData = {
         value: val,
@@ -272,6 +362,10 @@ app.post('/api/alcohol', (req, res) => {
     res.json({ success: true });
 });
 
+app.get('/api/alcohol', (req, res) => {
+    res.json(alcoholData);
+});
+
 // --- GPS Location API (NEO-7) ---
 let locationData = {
     latitude: 0.0,
@@ -282,21 +376,29 @@ let locationData = {
 
 app.post('/api/location', (req, res) => {
     const { latitude, longitude, speed } = req.body;
-    locationData = {
-        latitude: parseFloat(latitude) || 0.0,
-        longitude: parseFloat(longitude) || 0.0,
-        speed: parseFloat(speed) || 0.0,
-        timestamp: Date.now()
-    };
+    const newLat = parseFloat(latitude) || 0;
+    const newLon = parseFloat(longitude) || 0;
 
-    // Log GPS to Sensor Logs
-    db.run(`INSERT INTO sensor_logs (sensor_type, value_1, value_2, value_3) VALUES (?, ?, ?, ?)`,
-        ['GPS', locationData.latitude, locationData.longitude, locationData.speed],
-        (err) => { if (err) console.error("GPS Log Error:", err.message); }
-    );
+    // Smart Update: Only update if we have a fix (non-zero)
+    // This allows Browser Geolocation (Phone/Laptop) to take over if Hardware GPS (Pi) fails and sends 0,0
+    if (newLat !== 0 || newLon !== 0) {
+        locationData = {
+            latitude: newLat,
+            longitude: newLon,
+            speed: parseFloat(speed) || 0.0,
+            timestamp: Date.now()
+        };
 
-    // Log occasionally
-    if (Date.now() % 5000 < 100) console.log(`📍 GPS: ${locationData.latitude}, ${locationData.longitude}`);
+        // Log GPS to Sensor Logs
+        db.run(`INSERT INTO sensor_logs (sensor_type, value_1, value_2, value_3) VALUES (?, ?, ?, ?)`,
+            ['GPS', locationData.latitude, locationData.longitude, locationData.speed],
+            (err) => { if (err) console.error("GPS Log Error:", err.message); }
+        );
+
+        // Log occasionally
+        if (Date.now() % 5000 < 100) console.log(`📍 GPS Update: ${locationData.latitude}, ${locationData.longitude}`);
+    }
+
     res.json({ success: true });
 });
 
@@ -354,23 +456,51 @@ app.post('/api/sos', (req, res) => {
         else console.log("✅ SOS Incident Logged to Database");
     });
 
-    // 3. Execute Python Script for SMS
-    // Adjust command based on your environment (python vs python3)
-    const cmd = `python3 gsm_utils.py "${smsMsg}"`;
+    // 3. Mark SOS as Pending for Pi to Pick up
+    // We will use a simple in-memory flag or DB. 
+    // Since we don't have a 'commands' table, let's use a global variable that the Pi polls.
+    global.sosCommandPending = {
+        active: true,
+        message: smsMsg,
+        timestamp: Date.now()
+    };
 
-    console.log(`🚨 Triggering SOS SMS: ${smsMsg}`);
+    console.log(`🚨 SOS Alert Received from Web/App. Waiting for Pi to sync...`);
 
-    exec(cmd, (error, stdout, stderr) => {
-        if (error) {
-            console.error(`❌ SMS Execution Error: ${error.message}`);
-            // Don't fail the request, just log it. Server might not be on Pi.
-            return res.json({ success: false, error: error.message });
-        }
-        console.log(`✅ SMS Output: ${stdout}`);
-        res.json({ success: true, message: 'SOS Alert Sent & Logged' });
-    });
+    // We do NOT run python here anymore.
+    res.json({ success: true, message: 'SOS Alert Queued for GSM Module' });
 });
 
+
+
+// --- Pi Polling Endpoint ---
+app.get('/api/sos/check', (req, res) => {
+    if (global.sosCommandPending && global.sosCommandPending.active) {
+        // user only sees this once
+        const msg = global.sosCommandPending.message;
+
+        // Timeout check (expire after 30s)
+        if (Date.now() - global.sosCommandPending.timestamp > 30000) {
+            global.sosCommandPending.active = false;
+            return res.json({ trigger: false });
+        }
+
+        // Fetch Emergency Contact from DB to ensure we have the latest
+        db.get("SELECT emergency_contact FROM user_profile WHERE id = 1", (err, row) => {
+            const contact = row ? row.emergency_contact : null;
+
+            // Send Command
+            global.sosCommandPending.active = false; // Reset after sending
+            return res.json({
+                trigger: true,
+                message: msg,
+                target_contact: contact
+            });
+        });
+    } else {
+        res.json({ trigger: false });
+    }
+});
 
 // --- GSM Status API ---
 app.get('/api/gsm-status', (req, res) => {

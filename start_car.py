@@ -21,7 +21,7 @@ processes = []
 
 def signal_handler(sig, frame):
     print("\n🛑 Stopping All Road Monitor Modules...")
-    for p in processes:
+    for p in processes: 
         p.terminate()
         try:
             p.wait(timeout=2)

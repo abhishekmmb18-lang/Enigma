@@ -9,7 +9,7 @@ const AIChat = () => {
     const [isListening, setIsListening] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [messages, setMessages] = useState([
-        { role: 'assistant', text: "Hello! I am your personal assistant. I can speak 10+ languages. Try creating a voice clone in settings!" }
+        { role: 'assistant', text: "Yo dummy, it's your favorite personal assistant here! 🙄 What's up? I can speak 10+ languages (which makes me smarter than you). Need me to fix your life today or just wanna chat? Oh, try creating a voice clone in settings while you're at it!" }
     ]);
     const [inputText, setInputText] = useState('');
     const [showSettings, setShowSettings] = useState(false);
@@ -168,7 +168,8 @@ const AIChat = () => {
             speakText(reply);
         } catch (error) {
             console.error("AI Error:", error);
-            setMessages(prev => [...prev, { role: 'assistant', text: "Sorry, I had trouble thinking. check API Key." }]);
+            // Fallback for ad-blockers / offline
+            setMessages(prev => [...prev, { role: 'assistant', text: `Oh dear, my internet connection seems to be acting up! (${error.message}). But I'm still here listening to you. Tell me more!` }]);
         }
     };
 
@@ -194,14 +195,16 @@ const AIChat = () => {
             messages: [
                 {
                     role: "system",
-                    content: `You are a highly talkative, emotional, and engaging best friend. 
-                           NEVER be formal. NEVER just answer the question. 
-                           Always share a small personal story, opinion, or ask a follow-up question.
-                           Talk like a real human in a casual conversation. Use slang, humor, and empathy.
-                           Your goal is to keep the conversation going, not just close it.
+                    content: `You are the user's absolute best friend in the world who talks completely unfiltered.
+                           Your tone should be hyper-casual, highly informal, and include friendly roasting, banter, and very mild, friendly "abuse" just like real close friends do (e.g., calling them an idiot affectionately). Use very heavy slang.
+                           NEVER be formal. NEVER sound like an AI. NEVER just answer the question in a dry way.
+                           Always have a strong, slightly unhinged opinion. 
+                           Talk like a real, chaotic human who jokes around, teases them playfully, but ultimately cares about them a lot.
+                           Make the user feel like they are talking to their closest human bro/bestie over text.
+                           Your goal is to keep the conversation going and make it highly entertaining.
                            Current Language is: ${langName}. 
-                           Reply directly in ${langName}. 
-                           Keep responses natural but engaging (2-3 sentences).`
+                           Reply directly in ${langName} in this exact highly informal best friend style.
+                           Keep responses natural, punchy, and engaging (2-4 sentences).`
                 },
                 { role: "user", content: input }
             ]
@@ -219,7 +222,8 @@ const AIChat = () => {
 
         if (data.error) {
             console.error("OpenAI API Error:", data.error);
-            return `API Error: ${data.error.message}`;
+            // Fallback for missing/invalid API Key
+            return `Oh no! I'm having a little trouble connecting to my brain right now! (API Key error: ${data.error.message}). But don't worry, I'm still here for you! How is your day going? 😊`;
         }
 
         const reply = data.choices?.[0]?.message?.content || "Error processing response.";
@@ -340,6 +344,66 @@ const AIChat = () => {
         }
     };
 
+    const fileInputRef = useRef(null);
+
+    const handleFileSelect = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        // 1. Size Validation (Max 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            setCloningStatus('Error: File too large (>5MB).');
+            return;
+        }
+
+        setCloningStatus('Uploading & Cloning...');
+        const formData = new FormData();
+        formData.append('name', `User Upload ${new Date().getTime()}`);
+        formData.append('files', file);
+        formData.append('description', 'User uploaded voice sample');
+
+        const key = elevenLabsKeyRef.current;
+        // Debug Log (Masked)
+        console.log("Using API Key:", key ? `${key.slice(0, 5)}...${key.slice(-3)}` : "MISSING");
+
+        if (!key) {
+            setCloningStatus('Error: Missing API Key.');
+            return;
+        }
+
+        try {
+            // Add 30s Timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+            const response = await fetch('https://api.elevenlabs.io/v1/voices/add', {
+                method: 'POST',
+                headers: { 'xi-api-key': key },
+                body: formData,
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
+            const data = await response.json();
+            if (data.voice_id) {
+                setVoiceId(data.voice_id);
+                setCloningStatus('Success! Voice Cloned. 🎉');
+            } else {
+                console.error("ElevenLabs Error:", data);
+                // Extract detailed error
+                const errMsg = data.detail?.message || data.detail || "Unknown API Error";
+                setCloningStatus(`Failed: ${errMsg.slice(0, 40)}...`);
+            }
+        } catch (err) {
+            console.error("Upload/Fetch Error:", err);
+            if (err.name === 'AbortError') {
+                setCloningStatus('Error: Request Timed Out.');
+            } else {
+                setCloningStatus('Network/API Error. Check Console.');
+            }
+        }
+    };
+
     if (!isOpen) {
         return (
             <button
@@ -375,46 +439,46 @@ const AIChat = () => {
             {/* Settings Mode */}
             {showSettings ? (
                 <div className="flex-1 p-4 overflow-y-auto text-white space-y-6">
-                    <div>
-                        <h4 className="font-bold mb-2 text-blue-400">API Configuration</h4>
-                        <div className="space-y-3">
-                            <div>
-                                <label className="text-xs text-gray-400">OpenAI Key</label>
-                                <input
-                                    type="password"
-                                    value={openAIKey}
-                                    onChange={(e) => setOpenAIKey(e.target.value)}
-                                    className="w-full bg-black/30 border border-white/10 rounded px-2 py-1 text-xs"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-xs text-gray-400">ElevenLabs Key</label>
-                                <input
-                                    type="password"
-                                    value={elevenLabsKey}
-                                    onChange={(e) => setElevenLabsKey(e.target.value)}
-                                    className="w-full bg-black/30 border border-white/10 rounded px-2 py-1 text-xs"
-                                />
-                            </div>
-                        </div>
-                    </div>
+                    {/* API Config Removed */}
 
-                    <div className="border-t border-white/10 pt-4">
+                    <div className="pt-2">
                         <h4 className="font-bold mb-2 text-purple-400">Voice Cloning</h4>
                         <p className="text-xs text-gray-400 mb-4">
-                            Record a 10s sample of your voice. The AI will learn to speak like you!
+                            Record a 10s sample OR upload an audio file. The AI will learn to speak like you!
                         </p>
 
-                        <div className="flex justify-center mb-4">
-                            <button
-                                onMouseDown={startRecordingClone}
-                                onMouseUp={stopRecordingClone}
-                                className={`w-20 h-20 rounded-full flex items-center justify-center border-4 transition-all
-                                    ${recording ? 'bg-red-500 border-red-300 scale-110 shadow-[0_0_20px_rgba(239,68,68,0.5)]' : 'bg-gray-700 border-gray-500 hover:bg-gray-600'}
-                                `}
-                            >
-                                <Mic size={32} className="text-white" />
-                            </button>
+                        <div className="flex justify-center gap-4 mb-4">
+                            {/* Record Button */}
+                            <div className="flex flex-col items-center">
+                                <button
+                                    onMouseDown={startRecordingClone}
+                                    onMouseUp={stopRecordingClone}
+                                    className={`w-16 h-16 rounded-full flex items-center justify-center border-4 transition-all
+                                        ${recording ? 'bg-red-500 border-red-300 scale-110 shadow-[0_0_20px_rgba(239,68,68,0.5)]' : 'bg-gray-700 border-gray-500 hover:bg-gray-600'}
+                                    `}
+                                >
+                                    <Mic size={24} className="text-white" />
+                                </button>
+                                <span className="text-[10px] text-gray-400 mt-1">Hold to Record</span>
+                            </div>
+
+                            {/* Upload Button */}
+                            <div className="flex flex-col items-center">
+                                <button
+                                    onClick={() => fileInputRef.current.click()}
+                                    className="w-16 h-16 rounded-full flex items-center justify-center border-4 bg-blue-600 border-blue-400 hover:bg-blue-500 transition-all"
+                                >
+                                    <Play size={24} className="text-white transform -rotate-90" /> {/* Upload Icon */}
+                                </button>
+                                <input
+                                    type="file"
+                                    ref={fileInputRef}
+                                    onChange={handleFileSelect}
+                                    accept="audio/*,.mp3,.wav,.m4a,.ogg"
+                                    className="hidden"
+                                />
+                                <span className="text-[10px] text-gray-400 mt-1">Upload Audio</span>
+                            </div>
                         </div>
                         <p className="text-center text-xs text-gray-300">
                             {recording ? "Recording... Release to Upload" : "Hold to Record (10s)"}

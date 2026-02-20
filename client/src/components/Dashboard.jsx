@@ -344,8 +344,30 @@ const AlcoholWidget = () => {
         return 'bg-green-500/10 border-green-500/50';
     };
 
+    const [lastAlertTime, setLastAlertTime] = React.useState(0);
+
+    React.useEffect(() => {
+        if (data.level === 'High') {
+            const now = Date.now();
+            // Alert every 15 seconds if still high
+            if (now - lastAlertTime > 15000) {
+                const msg = new SpeechSynthesisUtterance("Critical Alert! You are drunk, please stop driving. Aap nashe mein hain, kripya gaadi rokein.");
+                msg.rate = 1.0;
+                msg.pitch = 1.0;
+                msg.volume = 1.0;
+                window.speechSynthesis.speak(msg);
+                setLastAlertTime(now);
+            }
+        }
+    }, [data.level, lastAlertTime]);
+
     return (
         <div className={`w-full h-full flex flex-col items-center justify-center transition-all duration-500 ${getBgColor()} rounded-xl p-4`}>
+            {data.level === 'High' && (
+                <div className="absolute top-2 animate-bounce text-red-500 font-bold text-center w-full">
+                    STOP DRIVING / gaadi rokein
+                </div>
+            )}
             <h3 className="text-xl font-bold text-gray-300 mb-2">Driver Alcohol Level</h3>
 
             <div className={`text-6xl font-black mb-2 transition-all duration-500 ${getColor()}`}>

@@ -47,6 +47,9 @@
 
 ## 📦 Installation & Setup
 
+For a complete, step-by-step guide to assembling the hardware and installing the software, please see:
+👉 **[BUILD_INSTRUCTIONS.md](./BUILD_INSTRUCTIONS.md)**
+
 ### Prerequisites
 *   Node.js (v16+)
 *   Python (v3.8+)
@@ -98,9 +101,9 @@ For detailed wiring instructions of the GSM, GPS, and Sensors, please refer to [
 ---
 
 ## 👥 Contributors
-*   **Team Lead**: [Your Name]
-*   **Developer**: [Name]
-*   **Hardware Specialist**: [Name]
+*   **Team Lead**: [RITIK GORAI]
+*   **Developer**: [ABHISHEK VERMA]
+*   **Hardware Specialist**: [ARYAN MAURYA]
 
 ---
 
