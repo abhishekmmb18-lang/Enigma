@@ -103,7 +103,7 @@ For detailed wiring instructions of the GSM, GPS, and Sensors, please refer to [
 ## 👥 Contributors
 *   **Team Lead**: [RITIK GORAI]
 *   **Developer**: [ABHISHEK VERMA]
-*   **Hardware Specialist**: [ARYAN MAURYA]
+*   **Hardware Specialist**: [ANVESHA TIWARI]
 
 ---
 
